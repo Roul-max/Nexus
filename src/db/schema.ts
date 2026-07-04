@@ -28,6 +28,10 @@ export const users = pgTable('users', {
   email: varchar('email', { length: 255 }).unique().notNull(),
   name: varchar('name', { length: 255 }),
   avatarUrl: text('avatar_url'),
+  emailVerified: boolean('email_verified').default(false).notNull(),
+  onboardingCompleted: boolean('onboarding_completed').default(false).notNull(),
+  lastSignedInAt: timestamp('last_signed_in_at'),
+  lastActivityAt: timestamp('last_activity_at'),
   isActive: boolean('is_active').default(true).notNull(),
   ...timestamps,
 }, (table) => ({
@@ -130,6 +134,7 @@ export const tasks = pgTable('tasks', {
   priority: varchar('priority', { length: 50 }).notNull().default('medium'), // low, medium, high, urgent
   dueDate: timestamp('due_date'),
   points: integer('points'),
+  completedAt: timestamp('completed_at'),
   ...timestamps,
 }, (table) => ({
   projectStatusIdx: index('task_proj_status_idx').on(table.projectId, table.status)
@@ -157,6 +162,7 @@ export const leads = pgTable('leads', {
   status: varchar('status', { length: 50 }).notNull().default('new'), // new, contacted, qualified, lost, converted
   source: varchar('source', { length: 100 }),
   score: integer('score').default(0),
+  convertedAt: timestamp('converted_at'),
   ...timestamps,
 }, (table) => ({
   orgLeadStatusIdx: index('org_lead_status_idx').on(table.organizationId, table.status)
@@ -272,6 +278,7 @@ export const subscriptions = pgTable('subscriptions', {
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   stripeSubscriptionId: varchar('stripe_subscription_id', { length: 255 }).unique(),
   stripePriceId: varchar('stripe_price_id', { length: 255 }),
+  plan: varchar('plan', { length: 50 }).notNull().default('free'), // e.g., 'free', 'pro', 'enterprise'
   status: varchar('status', { length: 50 }).notNull(), // 'active', 'canceled', 'past_due', 'trialing'
   currentPeriodStart: timestamp('current_period_start'),
   currentPeriodEnd: timestamp('current_period_end'),
@@ -286,6 +293,7 @@ export const invoices = pgTable('invoices', {
   stripeInvoiceId: varchar('stripe_invoice_id', { length: 255 }).unique(),
   amountDue: integer('amount_due').notNull(),
   amountPaid: integer('amount_paid').notNull(),
+  paidAt: timestamp('paid_at'),
   status: varchar('status', { length: 50 }).notNull(), // 'draft', 'open', 'paid', 'uncollectible', 'void'
   invoicePdf: text('invoice_pdf'),
   ...timestamps,

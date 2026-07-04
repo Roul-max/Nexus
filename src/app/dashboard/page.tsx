@@ -1,48 +1,72 @@
-import { Suspense } from 'react';
+'use client';
+
+import { useEffect, useState } from 'react';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Users, DollarSign, Briefcase, TrendingUp } from 'lucide-react';
 import { StatCard, StatCardSkeleton } from './StatCard';
 import { RecentActivity, RecentActivitySkeleton } from './RecentActivity';
+import { useAuth } from '@/lib/firebase/auth-context';
 
-async function DashboardStats() {
-  const stats = [
-    {
-      name: 'Total Revenue',
-      value: '$0',
-      icon: DollarSign,
-    },
-    {
-      name: 'Active Users',
-      value: '0',
-      icon: Users,
-    },
-    {
-      name: 'Active Projects',
-      value: '0',
-      icon: Briefcase,
-    },
-    {
-      name: 'Conversion Rate',
-      value: 'N/A',
-      icon: TrendingUp,
-    },
-  ];
+interface DashboardData {
+  totalRevenue: number;
+  activeUsers: number;
+  activeProjects: number;
+  newLeadsLast7Days: number;
+  recentActivity: { action: string; createdAt: string; userName: string | null }[];
+}
 
-  return (
-    <>
-      {stats.map((stat) => (
-        <StatCard
-          key={stat.name}
-          name={stat.name}
-          value={stat.value}
-          Icon={stat.icon}
-        />
-      ))}
-    </>
-  );
+function useDashboardData() {
+  const { currentOrg } = useAuth();
+  const organization = currentOrg;
+  const [data, setData] = useState<DashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!organization) {
+      // If there's no organization, we're not loading data for it.
+      // This can happen during initial load or if the user has no orgs.
+      setLoading(false);
+      return;
+    }
+
+    async function fetchData() {
+      setLoading(true);
+      const org = organization;
+      if (!org) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch('/api/dashboard', {
+          headers: { 'X-Organization-Id': org.id },
+        });
+        if (!response.ok) throw new Error('Failed to fetch dashboard data');
+        const result = await response.json();
+        setData(result.data);
+      } catch (error) {
+        console.error(error);
+        setData(null);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchData();
+  }, [organization]);
+
+  return { data, loading };
 }
 
 export default function DashboardPage() {
+  const { data, loading } = useDashboardData();
+
+  const stats = [
+    { name: 'Total Revenue', value: data ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.totalRevenue / 100) : '$0.00', icon: DollarSign },
+    { name: 'Active Users', value: data?.activeUsers ?? 0, icon: Users },
+    { name: 'Active Projects', value: data?.activeProjects ?? 0, icon: Briefcase },
+    { name: 'New Leads (7d)', value: data?.newLeadsLast7Days ?? 0, icon: TrendingUp },
+  ];
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -68,18 +92,18 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          <Suspense
-            fallback={
-              <>
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-                <StatCardSkeleton />
-              </>
-            }
-          >
-            <DashboardStats />
-          </Suspense>
+          {loading ? (
+            <>
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+              <StatCardSkeleton />
+            </>
+          ) : (
+            stats.map((stat) => (
+              <StatCard key={stat.name} name={stat.name} value={stat.value} Icon={stat.icon} />
+            ))
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -100,9 +124,11 @@ export default function DashboardPage() {
               Recent Activity
             </h2>
 
-            <Suspense fallback={<RecentActivitySkeleton />}>
-              <RecentActivity />
-            </Suspense>
+            {loading ? (
+              <RecentActivitySkeleton />
+            ) : (
+              <RecentActivity activities={data?.recentActivity ?? []} />
+            )}
           </div>
         </div>
       </div>

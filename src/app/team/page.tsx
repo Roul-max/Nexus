@@ -1,15 +1,64 @@
-import { AppLayout } from '@/components/layout/AppLayout';
-import { Plus, MoreHorizontal, Mail, Shield, ShieldAlert } from 'lucide-react';
+'use client';
+
+import { useEffect, useState } from 'react';
+import { formatDistanceToNow } from 'date-fns';
+import { AppLayout } from '@/components/layout/AppLayout';;
+import { useAuth } from '@/lib/firebase/auth-context';
+import { Plus, MoreHorizontal, Shield, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
-const teamMembers = [
-  { id: 1, name: 'Alex Rivera', email: 'alex@nexus.inc', role: 'Super Admin', status: 'Active', lastActive: '2 mins ago' },
-  { id: 2, name: 'Sarah Jenkins', email: 'sarah@nexus.inc', role: 'Manager', status: 'Active', lastActive: '1 hour ago' },
-  { id: 3, name: 'Michael Chen', email: 'michael@nexus.inc', role: 'Employee', status: 'Offline', lastActive: '2 days ago' },
-  { id: 4, name: 'Emma Davis', email: 'emma@nexus.inc', role: 'Employee', status: 'Active', lastActive: '5 mins ago' },
-];
+interface TeamMember {
+  id: string;
+  name: string | null;
+  email: string;
+  role: string;
+  lastActive: string;
+  status: 'Active' | 'Offline';
+}
+
+function useTeamMembers() {
+  const { currentOrg } = useAuth();
+  const organization = currentOrg;
+  const [members, setMembers] = useState<TeamMember[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!organization) {
+      // If there's no organization, we're not loading data for it.
+      setLoading(false);
+      return;
+    }
+
+    async function fetchData() {
+      setLoading(true);
+      const org = organization;
+      if (!org) {
+        setLoading(false);
+        return;
+      }
+      try {
+        const response = await fetch('/api/team', {
+          headers: { 'X-Organization-Id': org.id },
+        });
+        if (!response.ok) throw new Error('Failed to fetch team members');
+        const result = await response.json();
+        setMembers(result.data);
+      } catch (error) {
+        console.error(error);
+        setMembers([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, [organization]);
+
+  return { members, loading };
+}
 
 export default function TeamPage() {
+  const { members: teamMembers, loading } = useTeamMembers();
+
   return (
     <AppLayout>
       <div className="max-w-7xl mx-auto space-y-6">
@@ -39,47 +88,62 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200">
-                {teamMembers.map((member) => (
-                  <tr key={member.id} className="hover:bg-zinc-50 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-full bg-zinc-200 border border-zinc-300 overflow-hidden">
-                          <img src={`https://picsum.photos/seed/${member.id + 10}/100/100`} alt={member.name} />
-                        </div>
-                        <div>
-                          <div className="font-medium text-zinc-900">{member.name}</div>
-                          <div className="text-zinc-500 mt-0.5">{member.email}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex items-center gap-1.5 text-zinc-700">
-                        {member.role === 'Super Admin' ? (
-                          <ShieldAlert className="w-4 h-4 text-red-500" />
-                        ) : member.role === 'Manager' ? (
-                          <Shield className="w-4 h-4 text-indigo-500" />
-                        ) : null}
-                        <span className="font-medium">{member.role}</span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <span className={cn(
-                        "px-2.5 py-1 text-xs font-medium rounded-full border",
-                        member.status === 'Active' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                      )}>
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-zinc-500">
-                      {member.lastActive}
-                    </td>
-                    <td className="px-6 py-4 text-right">
-                      <button className="p-2 text-zinc-400 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition-colors">
-                        <MoreHorizontal className="w-4 h-4" />
-                      </button>
+                {loading ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-zinc-500">
+                      Loading...
                     </td>
                   </tr>
-                ))}
+                ) : teamMembers.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="text-center py-12 text-zinc-500">
+                      No team members found.
+                    </td>
+                  </tr>
+                ) : (
+                  teamMembers.map(member => (
+                    <tr key={member.id} className="hover:bg-zinc-50 transition-colors" >
+                      <td className="px-6 py-4" >
+                        <div className="flex items-center gap-3" >
+                          <div className="w-8 h-8 rounded-full bg-zinc-200 border border-zinc-300 overflow-hidden" >
+                            <img src={`https://avatar.vercel.sh/${member.email}.png`} alt={member.name ?? ''} />
+                          </div>
+                          <div >
+                            <div className="font-medium text-zinc-900">{member.name}</div>
+                            <div className="text-zinc-500 mt-0.5">{member.email}</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4" >
+                        <div className="flex items-center gap-1.5 text-zinc-700" >
+                          {member.role === 'admin' ? (
+                            <ShieldAlert className="w-4 h-4 text-red-500" />
+                          ) : member.role === 'manager' ? (
+                            <Shield className="w-4 h-4 text-indigo-500" />
+                          ) : null}
+                          <span className="font-medium capitalize" > {member.role}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4" >
+                        <span className={cn(
+                          "px-2.5 py-1 text-xs font-medium rounded-full border",
+                          member.status === 'Active' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-zinc-100 text-zinc-600 border-zinc-200"
+                        )} >
+                          {member.status}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-zinc-500" >
+                        {member.lastActive}
+                      </td>
+                      <td className="px-6 py-4 text-right" >
+                        <button className="p-2 text-zinc-400 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition-colors" >
+                          <MoreHorizontal className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                  )
+                )}
               </tbody>
             </table>
           </div>

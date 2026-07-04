@@ -1,17 +1,15 @@
 import { formatDistanceToNow } from 'date-fns';
 
-export async function RecentActivity() {
-  const activities: {
-    action: string;
-    createdAt: Date;
-    userName: string;
-  }[] = [];
+interface Activity {
+  action: string;
+  createdAt: string;
+  userName: string | null;
+}
 
+export function RecentActivity({ activities }: { activities: Activity[] }) {
   if (activities.length === 0) {
     return (
-      <p className="text-sm text-zinc-500">
-        No recent activity.
-      </p>
+      <p className="text-sm text-zinc-500">No recent activity.</p>
     );
   }
 
@@ -22,14 +20,14 @@ export async function RecentActivity() {
           <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex-shrink-0" />
           <div>
             <p className="text-sm text-zinc-900 font-medium">
-              {activity.userName} performed action:{' '}
+              {activity.userName ?? 'System'} performed action:{' '}
               <span className="font-mono text-xs bg-zinc-100 p-1 rounded">
                 {activity.action}
               </span>
             </p>
 
             <p className="text-xs text-zinc-500 mt-0.5">
-              {formatDistanceToNow(activity.createdAt, {
+              {formatDistanceToNow(new Date(activity.createdAt), {
                 addSuffix: true,
               })}
             </p>
