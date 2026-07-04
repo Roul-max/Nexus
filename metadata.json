@@ -1,0 +1,8 @@
+{
+  "name": "Nexus SaaS Platform",
+  "description": "Enterprise-grade SaaS platform with CRM, ERP, Project Management, and AI capabilities.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

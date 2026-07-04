@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nexus-config
+data:
+  NODE_ENV: "production"
+  ENABLE_TELEMETRY: "true"
+  NEXT_PUBLIC_APP_URL: "https://app.nexus.local"
