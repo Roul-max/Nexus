@@ -6,6 +6,7 @@ import { Users, DollarSign, Briefcase, TrendingUp } from 'lucide-react';
 import { StatCard, StatCardSkeleton } from './StatCard';
 import { RecentActivity, RecentActivitySkeleton } from './RecentActivity';
 import { useAuth } from '@/lib/firebase/auth-context';
+import { RevenueChart } from '@/components/charts/RevenueChart';
 
 interface DashboardData {
   totalRevenue: number;
@@ -112,11 +113,7 @@ export default function DashboardPage() {
               Revenue Overview
             </h2>
 
-            <div className="w-full h-[300px] flex items-center justify-center border-2 border-dashed border-zinc-100 rounded-xl bg-zinc-50">
-              <span className="text-zinc-400 text-sm">
-                No analytics data available
-              </span>
-            </div>
+            <RevenueChart />
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm">

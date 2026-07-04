@@ -89,6 +89,21 @@ export const organizationUsers = pgTable('organization_users', {
   orgUserIdx: uniqueIndex('org_user_idx').on(table.organizationId, table.userId)
 }));
 
+// Organization Invitations
+export const organizationInvitations = pgTable('organization_invitations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
+  email: varchar('email', { length: 255 }).notNull(),
+  roleId: uuid('role_id').references(() => roles.id).notNull(),
+  invitedById: uuid('user_id').references(() => users.id).notNull(),
+  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, accepted, expired, revoked
+  expiresAt: timestamp('expires_at'),
+  ...timestamps,
+}, (table) => ({
+  orgEmailIdx: index('org_invite_email_idx').on(table.organizationId, table.email),
+  emailIdx: index('invite_email_idx').on(table.email),
+}));
+
 // Teams
 export const teams = pgTable('teams', {
   id: uuid('id').primaryKey().defaultRandom(),
@@ -348,6 +363,7 @@ export const usersRelations = relations(users, ({ many }) => ({
 export const organizationsRelations = relations(organizations, ({ many }) => ({
   organizationUsers: many(organizationUsers),
   teams: many(teams),
+  invitations: many(organizationInvitations),
   projects: many(projects),
   aiConversations: many(aiConversations),
 }));
@@ -364,6 +380,21 @@ export const organizationUsersRelations = relations(organizationUsers, ({ one })
   role: one(roles, {
     fields: [organizationUsers.roleId],
     references: [roles.id],
+  }),
+}));
+
+export const organizationInvitationsRelations = relations(organizationInvitations, ({ one }) => ({
+  organization: one(organizations, {
+    fields: [organizationInvitations.organizationId],
+    references: [organizations.id],
+  }),
+  role: one(roles, {
+    fields: [organizationInvitations.roleId],
+    references: [roles.id],
+  }),
+  invitedBy: one(users, {
+    fields: [organizationInvitations.invitedById],
+    references: [users.id],
   }),
 }));
 

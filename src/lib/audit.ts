@@ -8,8 +8,8 @@ export async function logAudit(
   action: string,
   entityType: string,
   entityId: string,
-  oldValues: Record<string, any> | null = null,
-  newValues: Record<string, any> | null = null,
+  oldValues: Record<string, unknown> | null = null,
+  newValues: Record<string, unknown> | null = null,
   req?: NextRequest
 ) {
   try {

@@ -1,11 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useTransition } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';;
 import { useAuth } from '@/lib/firebase/auth-context';
 import { Plus, MoreHorizontal, Shield, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { InviteMemberModal } from './_components/InviteMemberModal';
+import { PendingInvitations } from './_components/PendingInvitations';
 
 interface TeamMember {
   id: string;
@@ -58,6 +60,7 @@ function useTeamMembers() {
 
 export default function TeamPage() {
   const { members: teamMembers, loading } = useTeamMembers();
+  const [isInviteModalOpen, setInviteModalOpen] = useState(false);
 
   return (
     <AppLayout>
@@ -68,7 +71,7 @@ export default function TeamPage() {
             <p className="text-sm text-zinc-500 mt-1">Manage user access, roles, and permissions.</p>
           </div>
           <div className="flex gap-3">
-            <button className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors">
+            <button onClick={() => setInviteModalOpen(true)} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 text-white rounded-lg text-sm font-medium hover:bg-zinc-800 transition-colors">
               <Plus className="w-4 h-4" />
               Invite Member
             </button>
@@ -148,6 +151,10 @@ export default function TeamPage() {
             </table>
           </div>
         </div>
+
+        <PendingInvitations />
+
+        <InviteMemberModal isOpen={isInviteModalOpen} onClose={() => setInviteModalOpen(false)} />
       </div>
     </AppLayout>
   );

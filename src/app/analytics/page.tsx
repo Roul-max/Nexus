@@ -12,6 +12,9 @@ import {
   Briefcase,
   CheckCircle,
 } from 'lucide-react';
+import { RevenueChart } from '@/components/charts/RevenueChart';
+import { LeadsChart } from '@/components/charts/LeadsChart';
+import { ProjectStatusChart } from '@/components/charts/ProjectStatusChart';
 
 interface AnalyticsData {
   leadsLast30Days: number;
@@ -126,27 +129,19 @@ export default function AnalyticsPage() {
             <h2 className="text-lg font-bold tracking-tight text-zinc-900 mb-6">
               Revenue Overview
             </h2>
-
-            <div className="flex-1 flex items-center justify-center border-2 border-dashed border-zinc-100 rounded-xl bg-zinc-50">
-              <span className="text-zinc-400 text-sm flex flex-col items-center gap-2">
-                <BarChart className="w-8 h-8 text-zinc-300" />
-                Revenue Chart Visualization
-              </span>
-            </div>
+            <RevenueChart />
           </div>
 
           <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm min-h-[400px] flex flex-col">
             <h2 className="text-lg font-bold tracking-tight text-zinc-900 mb-6">
-              User Acquisition
+              Lead Acquisition
             </h2>
-
-            <div className="flex-1 flex items-center justify-center border-2 border-dashed border-zinc-100 rounded-xl bg-zinc-50">
-              <span className="text-zinc-400 text-sm flex flex-col items-center gap-2">
-                <PieChartIcon className="w-8 h-8 text-zinc-300" />
-                Acquisition Channels Chart
-              </span>
-            </div>
+            <LeadsChart />
           </div>
+        </div>
+        <div className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm min-h-[400px] flex flex-col">
+          <h2 className="text-lg font-bold tracking-tight text-zinc-900 mb-6">Project Status</h2>
+          <ProjectStatusChart />
         </div>
       </div>
     </AppLayout>

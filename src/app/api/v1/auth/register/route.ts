@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { db } from '@/db';
 import { organizationUsers, organizations, roles, users } from '@/db/schema';
 import { AuthError, requireAuth } from '@/lib/auth';
+import { logAudit } from '@/lib/audit';
 
 const bodySchema = z.object({ name: z.string().trim().min(1).max(255).optional() });
 
@@ -27,6 +28,8 @@ export async function POST(req: NextRequest) {
         firebaseUid: token.uid,
         email: token.email!,
         name: token.name ?? body.name ?? null,
+        lastSignedInAt: new Date(),
+        lastActivityAt: new Date(),
       }).returning();
 
       const [organization] = await tx.insert(organizations).values({
@@ -46,6 +49,15 @@ export async function POST(req: NextRequest) {
         userId: user.id,
         roleId: role.id,
       });
+
+      await logAudit(
+        organization.id,
+        user.id,
+        'USER_REGISTERED',
+        'user',
+        user.id,
+        null,
+        { email: user.email, name: user.name });
       return user;
     });
 
