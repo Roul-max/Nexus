@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { Users, DollarSign, Briefcase, TrendingUp } from 'lucide-react';
 import { StatCard, StatCardSkeleton } from './StatCard';
 import { RecentActivity, RecentActivitySkeleton } from './RecentActivity';
 import { useAuth } from '@/lib/firebase/auth-context';
-import { RevenueChart } from '@/components/charts/RevenueChart';
+import { formatCurrency } from '@/lib/currency';
+import { RevenueChart } from './RevenueChart';
 
 interface DashboardData {
   totalRevenue: number;
@@ -16,53 +17,37 @@ interface DashboardData {
   recentActivity: { action: string; createdAt: string; userName: string | null }[];
 }
 
-function useDashboardData() {
-  const { currentOrg } = useAuth();
-  const organization = currentOrg;
-  const [data, setData] = useState<DashboardData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!organization) {
-      // If there's no organization, we're not loading data for it.
-      // This can happen during initial load or if the user has no orgs.
-      setLoading(false);
-      return;
-    }
-
-    async function fetchData() {
-      setLoading(true);
-      const org = organization;
-      if (!org) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const response = await fetch('/api/dashboard', {
-          headers: { 'X-Organization-Id': org.id },
-        });
-        if (!response.ok) throw new Error('Failed to fetch dashboard data');
-        const result = await response.json();
-        setData(result.data);
-      } catch (error) {
-        console.error(error);
-        setData(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [organization]);
-
-  return { data, loading };
-}
-
 export default function DashboardPage() {
-  const { data, loading } = useDashboardData();
+  const { currentOrg, user } = useAuth();
+
+  const { data, isLoading } = useQuery<DashboardData>({
+    queryKey: ['dashboardData', currentOrg?.id],
+    queryFn: async () => {
+      if (!currentOrg || !user) {
+        throw new Error('Organization or user not available');
+      }
+      const token = await user.getIdToken();
+      const response = await fetch('/api/dashboard', {
+        headers: {
+          'X-Organization-Id': currentOrg.id,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized: Please check your login session.');
+        }
+        throw new Error('Network response was not ok');
+      }
+      const result = await response.json();
+      return result.data;
+    },
+    enabled: !!currentOrg && !!user,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
 
   const stats = [
-    { name: 'Total Revenue', value: data ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(data.totalRevenue / 100) : '$0.00', icon: DollarSign },
+    { name: 'Total Revenue', value: data ? formatCurrency(data.totalRevenue) : '₹0', icon: DollarSign },
     { name: 'Active Users', value: data?.activeUsers ?? 0, icon: Users },
     { name: 'Active Projects', value: data?.activeProjects ?? 0, icon: Briefcase },
     { name: 'New Leads (7d)', value: data?.newLeadsLast7Days ?? 0, icon: TrendingUp },
@@ -93,7 +78,7 @@ export default function DashboardPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
-          {loading ? (
+          {isLoading ? (
             <>
               <StatCardSkeleton />
               <StatCardSkeleton />
@@ -121,7 +106,7 @@ export default function DashboardPage() {
               Recent Activity
             </h2>
 
-            {loading ? (
+            {isLoading ? (
               <RecentActivitySkeleton />
             ) : (
               <RecentActivity activities={data?.recentActivity ?? []} />

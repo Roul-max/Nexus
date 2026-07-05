@@ -38,7 +38,17 @@ export function LoginForm() {
     setLoading(true);
     setError(null);
     try {
-      await signInWithEmailAndPassword(auth, data.email, data.password);
+      const credential = await signInWithEmailAndPassword(auth, data.email, data.password);
+
+      // Sync user with our backend database on login
+      const token = await credential.user.getIdToken();
+      await fetch('/api/v1/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
       router.push('/dashboard');
     } catch (err) {
       const message =
@@ -59,7 +69,17 @@ export function LoginForm() {
         ? new GoogleAuthProvider()
         : new GithubAuthProvider();
     try {
-      await signInWithPopup(auth, authProvider);
+      const credential = await signInWithPopup(auth, authProvider);
+
+      // Sync user with our backend database on social login
+      const token = await credential.user.getIdToken();
+      await fetch('/api/v1/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
       router.push('/dashboard');
     } catch (err) {
       const message =

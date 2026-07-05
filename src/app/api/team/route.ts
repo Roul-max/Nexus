@@ -1,45 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, desc, eq } from 'drizzle-orm';
-import { formatDistanceToNow } from 'date-fns';
+import { and, eq, gte, sql, count } from 'drizzle-orm';
 import { db } from '@/db';
-import { organizationUsers, users, roles } from '@/db/schema';
+import { leads } from '@/db/schema';
 import { apiHandler } from '@/lib/api-handler';
-import { updateUserActivity } from '@/lib/activity';
 import { requireTenant } from '@/lib/auth';
 
+export const dynamic = 'force-dynamic'; // Mark this route as dynamic
+
 export const GET = apiHandler(async (req: NextRequest) => {
-  const { user, membership } = await requireTenant(req);
+  const { membership } = await requireTenant(req);
   const orgId = membership.organizationId;
 
-  // Fire-and-forget activity update
-  updateUserActivity(user.id);
+  const thirtyDaysAgo = new Date();
+  thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-  const members = await db
+  const leadsData = await db
     .select({
-      id: users.id,
-      name: users.name,
-      email: users.email,
-      avatarUrl: users.avatarUrl,
-      role: roles.name,
-      lastActivityAt: users.lastActivityAt,
-      createdAt: organizationUsers.createdAt,
+      date: sql<string>`DATE(created_at)`.as('date'),
+      leadCount: count(leads.id),
     })
-    .from(organizationUsers)
-    .innerJoin(users, eq(organizationUsers.userId, users.id))
-    .innerJoin(roles, eq(organizationUsers.roleId, roles.id))
-    .where(eq(organizationUsers.organizationId, orgId))
-    .orderBy(desc(users.lastActivityAt));
+    .from(leads)
+    .where(and(eq(leads.organizationId, orgId), gte(leads.createdAt, thirtyDaysAgo)))
+    .groupBy(sql`DATE(created_at)`)
+    .orderBy(sql`DATE(created_at)`);
 
-  const data = members.map(member => {
-    const lastActive = member.lastActivityAt
-      ? formatDistanceToNow(member.lastActivityAt, { addSuffix: true })
-      : 'Never';
-    const isActive =
-      member.lastActivityAt &&
-      new Date().getTime() - new Date(member.lastActivityAt).getTime() < 5 * 60 * 1000;
+  // Fill in missing dates with 0 leads
+  const dateMap = new Map(leadsData.map(item => [item.date, item.leadCount]));
+  const result = [];
+  for (let i = 0; i < 30; i++) {
+    const date = new Date();
+    date.setDate(date.getDate() - i);
+    const dateString = date.toISOString().split('T')[0];
+    result.unshift({ date: dateString, leadCount: dateMap.get(dateString) ?? 0 });
+  }
 
-    return { ...member, lastActive, status: isActive ? 'Active' : 'Offline' };
-  });
-
-  return NextResponse.json({ data });
+  return NextResponse.json({ data: result });
 });

@@ -30,6 +30,16 @@ export default function RegisterPage() {
     try {
       const credential = await createUserWithEmailAndPassword(auth, email, password);
       if (name) await updateProfile(credential.user, { displayName: name });
+
+      // Sync user with our backend database
+      const token = await credential.user.getIdToken();
+      await fetch('/api/v1/auth/sync', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
       router.replace('/dashboard');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'Unable to create account.');

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
-import { organizationUsers, organizations, users } from '@/db/schema';
+import { organizationUsers, organizations, users, roles } from '@/db/schema';
 import { AuthError, requireAuth } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
@@ -28,13 +28,18 @@ export async function GET(req: NextRequest) {
     if (!user) return NextResponse.json({ error: 'User not found' }, { status: 404 });
 
     const memberships = await db
-      .select({ organization: organizations })
+      .select({
+        organization: organizations,
+        role: roles,
+      })
       .from(organizationUsers)
       .innerJoin(organizations, eq(organizations.id, organizationUsers.organizationId))
+      .innerJoin(roles, eq(roles.id, organizationUsers.roleId))
       .where(eq(organizationUsers.userId, user.id));
 
     return NextResponse.json({
-      data: { ...user, organizations: memberships.map(({ organization }) => organization) },
+      // Combine organization and role info for the frontend
+      data: { ...user, organizations: memberships.map(({ organization, role }) => ({ ...organization, role: role.name })) },
     });
   } catch (error) {
     if (error instanceof AuthError) {

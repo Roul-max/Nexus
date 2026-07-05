@@ -1,66 +1,51 @@
 'use client';
 
-import { useEffect, useState, useTransition } from 'react';
+import { useState } from 'react';
 import { formatDistanceToNow } from 'date-fns';
 import { AppLayout } from '@/components/layout/AppLayout';;
 import { useAuth } from '@/lib/firebase/auth-context';
 import { Plus, MoreHorizontal, Shield, ShieldAlert } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { InviteMemberModal } from './_components/InviteMemberModal';
-import { PendingInvitations } from './_components/PendingInvitations';
+import { InviteMemberModal } from './InviteMemberModal';
+import { PendingInvitations } from './PendingInvitations';
+import { useQuery } from '@tanstack/react-query';
 
 interface TeamMember {
   id: string;
   name: string | null;
   email: string;
-  role: string;
-  lastActive: string;
-  status: 'Active' | 'Offline';
-}
-
-function useTeamMembers() {
-  const { currentOrg } = useAuth();
-  const organization = currentOrg;
-  const [members, setMembers] = useState<TeamMember[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!organization) {
-      // If there's no organization, we're not loading data for it.
-      setLoading(false);
-      return;
-    }
-
-    async function fetchData() {
-      setLoading(true);
-      const org = organization;
-      if (!org) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const response = await fetch('/api/team', {
-          headers: { 'X-Organization-Id': org.id },
-        });
-        if (!response.ok) throw new Error('Failed to fetch team members');
-        const result = await response.json();
-        setMembers(result.data);
-      } catch (error) {
-        console.error(error);
-        setMembers([]);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchData();
-  }, [organization]);
-
-  return { members, loading };
+  role: { name: string };
+  lastActivityAt: string | null;
 }
 
 export default function TeamPage() {
-  const { members: teamMembers, loading } = useTeamMembers();
+  const { currentOrg, user } = useAuth();
   const [isInviteModalOpen, setInviteModalOpen] = useState(false);
+
+  const { data: teamMembers, isLoading } = useQuery<TeamMember[]>({
+    queryKey: ['teamMembers', currentOrg?.id],
+    queryFn: async () => {
+      if (!currentOrg || !user) {
+        throw new Error('Organization or user not available');
+      }
+      const token = await user.getIdToken();
+      // NOTE: The correct endpoint for team members was not provided,
+      // so I'm assuming a standard /api/v1/team/members endpoint.
+      // You will need to create this API route.
+      const response = await fetch('/api/v1/team/members', {
+        headers: {
+          'X-Organization-Id': currentOrg.id,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        throw new Error('Failed to fetch team members');
+      }
+      const result = await response.json();
+      return result.data;
+    },
+    enabled: !!currentOrg && !!user,
+  });
 
   return (
     <AppLayout>
@@ -91,7 +76,7 @@ export default function TeamPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-zinc-200">
-                {loading ? (
+                {isLoading ? (
                   <tr>
                     <td colSpan={5} className="text-center py-12 text-zinc-500">
                       Loading...
@@ -104,48 +89,50 @@ export default function TeamPage() {
                     </td>
                   </tr>
                 ) : (
-                  teamMembers.map(member => (
-                    <tr key={member.id} className="hover:bg-zinc-50 transition-colors" >
-                      <td className="px-6 py-4" >
-                        <div className="flex items-center gap-3" >
-                          <div className="w-8 h-8 rounded-full bg-zinc-200 border border-zinc-300 overflow-hidden" >
+                  (teamMembers ?? []).map(member => (
+                    <tr key={member.id} className="hover:bg-zinc-50 transition-colors">
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 rounded-full bg-zinc-200 border border-zinc-300 overflow-hidden">
                             <img src={`https://avatar.vercel.sh/${member.email}.png`} alt={member.name ?? ''} />
                           </div>
-                          <div >
+                          <div>
                             <div className="font-medium text-zinc-900">{member.name}</div>
                             <div className="text-zinc-500 mt-0.5">{member.email}</div>
                           </div>
                         </div>
                       </td>
-                      <td className="px-6 py-4" >
-                        <div className="flex items-center gap-1.5 text-zinc-700" >
-                          {member.role === 'admin' ? (
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-1.5 text-zinc-700">
+                          {member.role.name === 'Organization Admin' ? (
                             <ShieldAlert className="w-4 h-4 text-red-500" />
-                          ) : member.role === 'manager' ? (
+                          ) : member.role.name === 'Manager' ? (
                             <Shield className="w-4 h-4 text-indigo-500" />
                           ) : null}
-                          <span className="font-medium capitalize" > {member.role}</span>
+                          <span className="font-medium capitalize"> {member.role.name}</span>
                         </div>
                       </td>
-                      <td className="px-6 py-4" >
-                        <span className={cn(
-                          "px-2.5 py-1 text-xs font-medium rounded-full border",
-                          member.status === 'Active' ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-zinc-100 text-zinc-600 border-zinc-200"
-                        )} >
-                          {member.status}
-                        </span>
+                      <td className="px-6 py-4">
+                        {member.lastActivityAt && (new Date().getTime() - new Date(member.lastActivityAt).getTime() < 5 * 60 * 1000) ? (
+                          <span className="px-2.5 py-1 text-xs font-medium rounded-full border bg-emerald-50 text-emerald-700 border-emerald-200">
+                            Active
+                          </span>
+                        ) : (
+                          <span className="px-2.5 py-1 text-xs font-medium rounded-full border bg-zinc-100 text-zinc-600 border-zinc-200">
+                            Offline
+                          </span>
+                        )}
                       </td>
-                      <td className="px-6 py-4 text-zinc-500" >
-                        {member.lastActive}
+                      <td className="px-6 py-4 text-zinc-500">
+                        {member.lastActivityAt ? formatDistanceToNow(new Date(member.lastActivityAt), { addSuffix: true }) : 'Never'}
                       </td>
-                      <td className="px-6 py-4 text-right" >
-                        <button className="p-2 text-zinc-400 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition-colors" >
+                      <td className="px-6 py-4 text-right">
+                        <button className="p-2 text-zinc-400 hover:text-zinc-900 rounded-lg hover:bg-zinc-100 transition-colors">
                           <MoreHorizontal className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
-                  )
-                  )
+                  ))
                 )}
               </tbody>
             </table>

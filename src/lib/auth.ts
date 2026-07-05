@@ -33,21 +33,21 @@ export async function requireTenant(req: NextRequest | Request) {
   });
   if (!user || !user.isActive) throw new AuthError('User not found or inactive', 403);
 
-  const requestedOrganizationId = req.headers.get('x-organization-id');
-  const memberships = await db
+  const orgId = req.headers.get('x-organization-id');
+  if (!orgId) throw new AuthError('Missing organization context', 400);
+
+  const [membership] = await db
     .select({ membership: organizationUsers, organization: organizations })
     .from(organizationUsers)
     .innerJoin(organizations, eq(organizations.id, organizationUsers.organizationId))
     .where(
-      requestedOrganizationId
-        ? and(
-            eq(organizationUsers.userId, user.id),
-            eq(organizationUsers.organizationId, requestedOrganizationId),
-          )
-        : eq(organizationUsers.userId, user.id),
+      and(
+        eq(organizationUsers.userId, user.id),
+        eq(organizationUsers.organizationId, orgId)
+      )
     )
     .limit(1);
 
-  if (!memberships[0]) throw new AuthError('Organization membership required', 403);
-  return { token, user, ...memberships[0] };
+  if (!membership) throw new AuthError('Organization membership required', 403);
+  return { token, user, ...membership };
 }

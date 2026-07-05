@@ -1,20 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { AppLayout } from '@/components/layout/AppLayout';
 import { useAuth } from '@/lib/firebase/auth-context';
 import {
   BarChart,
-  Activity,
   Users,
-  TrendingUp,
   Download,
   Briefcase,
   CheckCircle,
 } from 'lucide-react';
-import { RevenueChart } from '@/components/charts/RevenueChart';
-import { LeadsChart } from '@/components/charts/LeadsChart';
-import { ProjectStatusChart } from '@/components/charts/ProjectStatusChart';
+import { formatCurrency } from '@/lib/currency';
+import { RevenueChart } from '../dashboard/RevenueChart';
+import { LeadsChart } from './LeadsChart';
+import { ProjectStatusChart } from './ProjectStatusChart';
 
 interface AnalyticsData {
   leadsLast30Days: number;
@@ -24,55 +23,40 @@ interface AnalyticsData {
   totalUsers: number;
 }
 
-function useAnalyticsData() {
-  const { currentOrg } = useAuth();
-  const organization = currentOrg;
-  const [data, setData] = useState<AnalyticsData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    if (!organization) {
-      // If there's no organization, we're not loading data for it.
-      setLoading(false);
-      return;
-    }
-
-    async function fetchData() {
-      setLoading(true);
-      const org = organization;
-      if (!org) {
-        setLoading(false);
-        return;
-      }
-      try {
-        const response = await fetch('/api/analytics', {
-          headers: { 'X-Organization-Id': org.id },
-        });
-        if (!response.ok) throw new Error('Failed to fetch analytics data');
-        const result = await response.json();
-        setData(result.data);
-      } catch (error) {
-        console.error(error);
-        setData(null);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchData();
-  }, [organization]);
-
-  return { data, loading };
-}
-
 export default function AnalyticsPage() {
-  const { data, loading } = useAnalyticsData();
+  const { currentOrg, user } = useAuth();
+
+  const { data, isLoading } = useQuery<AnalyticsData>({
+    queryKey: ['analyticsData', currentOrg?.id],
+    queryFn: async () => {
+      if (!currentOrg || !user) {
+        throw new Error('Organization or user not available');
+      }
+      const token = await user.getIdToken();
+      const response = await fetch('/api/analytics', {
+        headers: {
+          'X-Organization-Id': currentOrg.id,
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      if (!response.ok) {
+        if (response.status === 401) {
+          throw new Error('Unauthorized: Please check your login session.');
+        }
+        throw new Error('Network response was not ok');
+      }
+      const result = await response.json();
+      return result.data;
+    },
+    enabled: !!currentOrg && !!user,
+    staleTime: 1000 * 60 * 5, // 5 minutes
+  });
 
   const stats = [
     { name: 'New Leads (30d)', value: data?.leadsLast30Days ?? 0, icon: Users },
     { name: 'New Projects (30d)', value: data?.projectsLast30Days ?? 0, icon: Briefcase },
     { name: 'Tasks Completed (30d)', value: data?.tasksLast30Days ?? 0, icon: CheckCircle },
-    { name: 'Revenue (30d)', value: new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format((data?.revenueLast30Days ?? 0) / 100), icon: BarChart },
+    { name: 'Revenue (30d)', value: data ? formatCurrency(data.revenueLast30Days) : '₹0', icon: BarChart },
   ];
 
   return (
@@ -102,7 +86,7 @@ export default function AnalyticsPage() {
           </div>
         </div>
 
-        {loading ? (
+        {isLoading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {[...Array(4)].map((_, i) => (
               <div key={i} className="bg-white p-6 rounded-2xl border border-zinc-200 shadow-sm h-32 animate-pulse" />
@@ -145,25 +129,5 @@ export default function AnalyticsPage() {
         </div>
       </div>
     </AppLayout>
-  );
-}
-
-function PieChartIcon(props: React.SVGProps<SVGSVGElement>) {
-  return (
-    <svg
-      {...props}
-      xmlns="http://www.w3.org/2000/svg"
-      width="24"
-      height="24"
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    >
-      <path d="M21.21 15.89A10 10 0 1 1 8 2.83" />
-      <path d="M22 12A10 10 0 0 0 12 2v10z" />
-    </svg>
   );
 }
