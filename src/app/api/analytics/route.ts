@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { and, count, eq, gte, sum } from 'drizzle-orm';
+import { hasPermission } from '@/lib/rbac';
 import { db } from '@/db';
 import {
   invoices,
@@ -9,11 +10,14 @@ import {
   tasks,
 } from '@/db/schema';
 import { apiHandler } from '@/lib/api-handler';
-import { requireTenant } from '@/lib/auth';
+import { AuthError, requireTenant } from '@/lib/auth';
 
 export const GET = apiHandler(async (req: NextRequest) => {
-  const { membership } = await requireTenant(req);
+  const { membership, user } = await requireTenant(req);
   const orgId = membership.organizationId;
+
+  const canReadAnalytics = await hasPermission(user.id, orgId, 'analytics:read');
+  if (!canReadAnalytics) throw new AuthError('Forbidden');
 
   const thirtyDaysAgo = new Date();
   thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);

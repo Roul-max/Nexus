@@ -11,7 +11,7 @@ const createLeadSchema = leadSchema.omit({ organizationId: true });
 
 export const GET = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'leads:view');
+  await requirePermission(user.id, membership.organizationId, 'leads:read');
   const data = await db.select().from(leads)
     .where(eq(leads.organizationId, membership.organizationId))
     .orderBy(desc(leads.createdAt));
@@ -20,7 +20,7 @@ export const GET = apiHandler(async (req: NextRequest) => {
 
 export const POST = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'leads:create');
+  await requirePermission(user.id, membership.organizationId, 'leads:write');
   const input = createLeadSchema.parse(await req.json());
   const [lead] = await db.insert(leads).values({
     ...input,

@@ -20,7 +20,7 @@ async function requireTenantProject(projectId: string, organizationId: string) {
 
 export const GET = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'tasks:view');
+  await requirePermission(user.id, membership.organizationId, 'tasks:read');
   const projectId = z.string().uuid().parse(req.nextUrl.searchParams.get('projectId'));
   await requireTenantProject(projectId, membership.organizationId);
   const data = await db.select().from(tasks)
@@ -31,7 +31,7 @@ export const GET = apiHandler(async (req: NextRequest) => {
 
 export const POST = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'tasks:create');
+  await requirePermission(user.id, membership.organizationId, 'tasks:write');
   const input = createTaskSchema.parse(await req.json());
   await requireTenantProject(input.projectId, membership.organizationId);
   if (input.assigneeId) {

@@ -18,7 +18,6 @@ import { relations } from 'drizzle-orm';
 const timestamps = {
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
-  deletedAt: timestamp('deleted_at'),
 };
 
 // Users
@@ -33,7 +32,6 @@ export const users = pgTable('users', {
   lastSignedInAt: timestamp('last_signed_in_at'),
   lastActivityAt: timestamp('last_activity_at'),
   isActive: boolean('is_active').default(true).notNull(),
-  ...timestamps,
 }, (table) => ({
   emailIdx: index('users_email_idx').on(table.email),
   firebaseUidIdx: uniqueIndex('users_firebase_uid_idx').on(table.firebaseUid)
@@ -47,7 +45,9 @@ export const organizations = pgTable('organizations', {
   logoUrl: text('logo_url'),
   website: varchar('website', { length: 255 }),
   stripeCustomerId: varchar('stripe_customer_id', { length: 255 }),
-  ...timestamps,
+  industry: varchar('industry', { length: 100 }),
+  companySize: varchar('company_size', { length: 50 }),
+  timezone: varchar('timezone', { length: 100 }),
 }, (table) => ({
   slugIdx: uniqueIndex('org_slug_idx').on(table.slug)
 }));
@@ -55,9 +55,8 @@ export const organizations = pgTable('organizations', {
 // Roles
 export const roles = pgTable('roles', {
   id: uuid('id').primaryKey().defaultRandom(),
-  name: varchar('name', { length: 50 }).notNull(), // Super Admin, Organization Admin, Manager, Employee, Read Only User
+  name: varchar('name', { length: 50 }).unique().notNull(), // e.g., 'Admin', 'Manager', 'Member', 'Read Only'
   description: text('description'),
-  ...timestamps,
 });
 
 // Permissions
@@ -65,7 +64,6 @@ export const permissions = pgTable('permissions', {
   id: uuid('id').primaryKey().defaultRandom(),
   name: varchar('name', { length: 100 }).notNull().unique(), // e.g., 'tasks.create', 'billing.view'
   description: text('description'),
-  ...timestamps,
 });
 
 // Role Permissions (Many-to-Many)
@@ -73,7 +71,6 @@ export const rolePermissions = pgTable('role_permissions', {
   id: uuid('id').primaryKey().defaultRandom(),
   roleId: uuid('role_id').references(() => roles.id).notNull(),
   permissionId: uuid('permission_id').references(() => permissions.id).notNull(),
-  ...timestamps,
 }, (table) => ({
   rolePermIdx: uniqueIndex('role_perm_idx').on(table.roleId, table.permissionId)
 }));
@@ -84,7 +81,6 @@ export const organizationUsers = pgTable('organization_users', {
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
   roleId: uuid('role_id').references(() => roles.id).notNull(),
-  ...timestamps,
 }, (table) => ({
   orgUserIdx: uniqueIndex('org_user_idx').on(table.organizationId, table.userId)
 }));
@@ -94,10 +90,10 @@ export const organizationInvitations = pgTable('organization_invitations', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   email: varchar('email', { length: 255 }).notNull(),
+  token: varchar('token', { length: 255 }).unique().notNull(),
   roleId: uuid('role_id').references(() => roles.id).notNull(),
   invitedById: uuid('user_id').references(() => users.id).notNull(),
-  status: varchar('status', { length: 20 }).notNull().default('pending'), // pending, accepted, expired, revoked
-  expiresAt: timestamp('expires_at'),
+  expiresAt: timestamp('expires_at').notNull(),
   ...timestamps,
 }, (table) => ({
   orgEmailIdx: index('org_invite_email_idx').on(table.organizationId, table.email),
@@ -110,7 +106,6 @@ export const teams = pgTable('teams', {
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   description: text('description'),
-  ...timestamps,
 });
 
 // Team Members
@@ -119,7 +114,6 @@ export const teamMembers = pgTable('team_members', {
   teamId: uuid('team_id').references(() => teams.id).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
   isLeader: boolean('is_leader').default(false).notNull(),
-  ...timestamps,
 }, (table) => ({
   teamUserIdx: uniqueIndex('team_user_idx').on(table.teamId, table.userId)
 }));
@@ -133,7 +127,6 @@ export const projects = pgTable('projects', {
   description: text('description'),
   status: varchar('status', { length: 50 }).notNull().default('active'), // active, completed, archived
   startDate: timestamp('start_date'),
-  endDate: timestamp('end_date'),
   ...timestamps,
 });
 
@@ -148,7 +141,6 @@ export const tasks = pgTable('tasks', {
   status: varchar('status', { length: 50 }).notNull().default('todo'), // todo, in-progress, review, done
   priority: varchar('priority', { length: 50 }).notNull().default('medium'), // low, medium, high, urgent
   dueDate: timestamp('due_date'),
-  points: integer('points'),
   completedAt: timestamp('completed_at'),
   ...timestamps,
 }, (table) => ({
@@ -161,7 +153,6 @@ export const taskComments = pgTable('task_comments', {
   taskId: uuid('task_id').references(() => tasks.id).notNull(),
   userId: uuid('user_id').references(() => users.id).notNull(),
   content: text('content').notNull(),
-  ...timestamps,
 });
 
 // CRM: Leads
@@ -177,7 +168,6 @@ export const leads = pgTable('leads', {
   status: varchar('status', { length: 50 }).notNull().default('new'), // new, contacted, qualified, lost, converted
   source: varchar('source', { length: 100 }),
   score: integer('score').default(0),
-  convertedAt: timestamp('converted_at'),
   ...timestamps,
 }, (table) => ({
   orgLeadStatusIdx: index('org_lead_status_idx').on(table.organizationId, table.status)
@@ -191,7 +181,6 @@ export const companies = pgTable('companies', {
   domain: varchar('domain', { length: 255 }),
   industry: varchar('industry', { length: 100 }),
   employeeCount: integer('employee_count'),
-  ...timestamps,
 });
 
 // CRM: Contacts
@@ -204,7 +193,6 @@ export const contacts = pgTable('contacts', {
   email: varchar('email', { length: 255 }),
   phone: varchar('phone', { length: 50 }),
   jobTitle: varchar('job_title', { length: 100 }),
-  ...timestamps,
 });
 
 // CRM: Opportunities / Deals
@@ -212,13 +200,13 @@ export const opportunities = pgTable('opportunities', {
   id: uuid('id').primaryKey().defaultRandom(),
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   companyId: uuid('company_id').references(() => companies.id),
-  contactId: uuid('contact_id').references(() => contacts.id),
   assignedToId: uuid('assigned_to_id').references(() => users.id),
   name: varchar('name', { length: 255 }).notNull(),
   amount: integer('amount').default(0), // in cents
   stage: varchar('stage', { length: 50 }).notNull().default('prospecting'),
   probability: integer('probability').default(10), // percentage 0-100
   expectedCloseDate: timestamp('expected_close_date'),
+  isWon: boolean('is_won'), // null = open, true = won, false = lost
   ...timestamps,
 });
 
@@ -230,7 +218,6 @@ export const notes = pgTable('notes', {
   entityType: varchar('entity_type', { length: 50 }).notNull(), // 'lead', 'contact', 'company', 'opportunity'
   entityId: uuid('entity_id').notNull(),
   content: text('content').notNull(),
-  ...timestamps,
 }, (table) => ({
   entityIdx: index('note_entity_idx').on(table.entityType, table.entityId)
 }));
@@ -246,7 +233,6 @@ export const fileUploads = pgTable('file_uploads', {
   fileUrl: text('file_url').notNull(),
   fileSize: integer('file_size').notNull(),
   mimeType: varchar('mime_type', { length: 100 }).notNull(),
-  ...timestamps,
 });
 
 // AI Conversations
@@ -257,7 +243,6 @@ export const aiConversations = pgTable('ai_conversations', {
   title: varchar('title', { length: 255 }),
   contextType: varchar('context_type', { length: 50 }), // 'general', 'crm', 'project', 'document'
   contextId: uuid('context_id'),
-  ...timestamps,
 });
 
 // AI Messages
@@ -267,7 +252,6 @@ export const aiMessages = pgTable('ai_messages', {
   role: varchar('role', { length: 20 }).notNull(), // 'user', 'assistant', 'system'
   content: text('content').notNull(),
   tokensUsed: integer('tokens_used'),
-  ...timestamps,
 });
 
 // Activity Tracking & Audit Logs
@@ -282,7 +266,7 @@ export const auditLogs = pgTable('audit_logs', {
   newValues: jsonb('new_values'),
   ipAddress: varchar('ip_address', { length: 45 }),
   userAgent: text('user_agent'),
-  ...timestamps,
+  createdAt: timestamp('created_at').defaultNow().notNull(),
 }, (table) => ({
   orgActionIdx: index('audit_org_action_idx').on(table.organizationId, table.action)
 }));
@@ -324,7 +308,6 @@ export const notifications = pgTable('notifications', {
   content: text('content'),
   isRead: boolean('is_read').default(false).notNull(),
   linkUrl: text('link_url'),
-  ...timestamps,
 }, (table) => ({
   userReadIdx: index('notif_user_read_idx').on(table.userId, table.isRead)
 }));
@@ -347,7 +330,6 @@ export const settings = pgTable('settings', {
   organizationId: uuid('organization_id').references(() => organizations.id).notNull(),
   key: varchar('key', { length: 100 }).notNull(),
   value: jsonb('value').notNull(),
-  ...timestamps,
 }, (table) => ({
   orgKeyIdx: uniqueIndex('settings_org_key_idx').on(table.organizationId, table.key)
 }));

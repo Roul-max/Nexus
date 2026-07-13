@@ -2,13 +2,17 @@ import { NextRequest, NextResponse } from 'next/server';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db';
 import { organizationUsers, organizations, users, roles } from '@/db/schema';
-import { AuthError, requireAuth } from '@/lib/auth';
+import { AuthError } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
 export async function GET(req: NextRequest) {
   try {
-    const token = await requireAuth(req);
-    const user = await db.query.users.findFirst({ where: eq(users.firebaseUid, token.uid) });
+    const userId = req.headers.get('x-user-id');
+    if (!userId) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const user = await db.query.users.findFirst({ where: eq(users.firebaseUid, userId) });
 
     if (user) {
       const now = new Date();

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { and, count, eq, sum, desc } from 'drizzle-orm';
+import { and, count, eq, gte, sum, desc } from 'drizzle-orm';
+import { hasPermission } from '@/lib/rbac';
 import { db } from '@/db';
 import {
   invoices,
@@ -10,11 +11,17 @@ import {
   users,
 } from '@/db/schema';
 import { apiHandler } from '@/lib/api-handler';
-import { requireTenant } from '@/lib/auth';
+import { AuthError, requireTenant } from '@/lib/auth';
 
 export const GET = apiHandler(async (req: NextRequest) => {
-  const { membership } = await requireTenant(req);
+  const { membership, user } = await requireTenant(req);
   const orgId = membership.organizationId;
+
+  const canReadDashboard = await hasPermission(user.id, orgId, 'dashboard:read');
+  if (!canReadDashboard) throw new AuthError('Forbidden');
+
+  const sevenDaysAgo = new Date();
+  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
 
   const totalRevenuePromise = db
     .select({ value: sum(invoices.amountPaid) })
@@ -31,10 +38,10 @@ export const GET = apiHandler(async (req: NextRequest) => {
     .from(projects)
     .where(and(eq(projects.organizationId, orgId), eq(projects.status, 'active')));
 
-  const totalLeadsPromise = db
+  const newLeadsPromise = db
     .select({ value: count() })
     .from(leads)
-    .where(eq(leads.organizationId, orgId));
+    .where(and(eq(leads.organizationId, orgId), gte(leads.createdAt, sevenDaysAgo)));
 
   const recentActivityPromise = db
     .select({
@@ -52,13 +59,13 @@ export const GET = apiHandler(async (req: NextRequest) => {
     [{ value: totalRevenue }],
     [{ value: activeUsers }],
     [{ value: activeProjects }],
-    [{ value: totalLeads }],
+    [{ value: newLeadsLast7Days }],
     recentActivity,
   ] = await Promise.all([
     totalRevenuePromise,
     activeUsersPromise,
     activeProjectsPromise,
-    totalLeadsPromise,
+    newLeadsPromise,
     recentActivityPromise,
   ]);
 
@@ -66,9 +73,11 @@ export const GET = apiHandler(async (req: NextRequest) => {
     totalRevenue: totalRevenue ?? 0,
     activeUsers: activeUsers ?? 0,
     activeProjects: activeProjects ?? 0,
-    totalLeads: totalLeads ?? 0,
-    recentActivity,
+    newLeadsLast7Days: newLeadsLast7Days ?? 0,
+    recentActivity: recentActivity.map(a => ({ ...a, createdAt: a.createdAt.toISOString() })),
   };
 
-  return NextResponse.json({ data });
+  return NextResponse.json({
+    data,
+  });
 });

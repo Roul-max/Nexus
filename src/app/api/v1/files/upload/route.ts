@@ -1,8 +1,8 @@
 import { NextResponse, NextRequest } from 'next/server';
 import { generateUploadUrl } from '@/lib/aws';
 import { db } from '@/db';
-import { AuthError, requireAuth } from '@/lib/auth';
-import { z } from 'zod';
+import { AuthError, requireTenant } from '@/lib/auth';
+import { z, ZodError } from 'zod';
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const uploadSchema = z.object({
@@ -15,7 +15,7 @@ const uploadSchema = z.object({
 function sanitizeFileName(fileName: string) {
   const baseName = fileName.replace(/\\/g, '/').split('/').pop() ?? '';
   const sanitized = baseName
-    .normalize('NFKC')
+    .normalize('NFC')
     .replace(/[^a-zA-Z0-9._-]/g, '-')
     .replace(/-+/g, '-')
     .replace(/^\.+/, '')
@@ -30,45 +30,14 @@ function sanitizeFileName(fileName: string) {
 
 export async function POST(req: NextRequest) {
   try {
-    const decodedToken = await requireAuth(req);
-    const firebaseUid = decodedToken.uid;
+    const { membership } = await requireTenant(req);
+    const organizationId = membership.organizationId;
+
     const { fileName, contentType, size, organizationId: clientOrgId } =
       uploadSchema.parse(await req.json());
     const safeFileName = sanitizeFileName(fileName);
 
-    // Find the user using Firebase UID
-    const user = await db.query.users.findFirst({
-      where: (u, { eq }) => eq(u.firebaseUid, firebaseUid)
-    });
-
-    if (!user) {
-      return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
-      );
-    }
-
-    // Verify organization membership
-    const userOrgMembership =
-      await db.query.organizationUsers.findFirst({
-        where: (ou, { and, eq }) =>
-          and(
-            eq(ou.organizationId, clientOrgId),
-            eq(ou.userId, user.id)
-          )
-      });
-
-    if (!userOrgMembership) {
-      return NextResponse.json(
-        {
-          error:
-            'Forbidden: User does not belong to the specified organization.'
-        },
-        { status: 403 }
-      );
-    }
-
-    const organizationId = userOrgMembership.organizationId;
+    if (organizationId !== clientOrgId) throw new AuthError('Organization mismatch', 403);
 
     const key = `${organizationId}/${Date.now()}-${safeFileName}`;
 
@@ -90,7 +59,7 @@ export async function POST(req: NextRequest) {
     if (error instanceof AuthError) {
       return NextResponse.json({ error: error.message }, { status: error.status });
     }
-    if (error instanceof z.ZodError) {
+    if (error instanceof ZodError) {
       return NextResponse.json(
         { error: 'Invalid upload request', details: error.flatten() },
         { status: 400 },

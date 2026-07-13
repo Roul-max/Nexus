@@ -1,5 +1,6 @@
 import { db } from '@/db';
 import {
+  permissions,
   roles,
   users,
   organizations,
@@ -10,6 +11,7 @@ import {
   tasks,
   leads,
   invoices,
+  rolePermissions,
   auditLogs,
   apiKeys,
 } from '@/db/schema';
@@ -27,18 +29,58 @@ async function main() {
     const seededRoles = await tx
       .insert(roles)
       .values([
-        { name: 'Organization Admin', description: 'Full access to all organization features.' },
+        { name: 'Admin', description: 'Full access to all organization features.' },
         { name: 'Manager', description: 'Manages projects and teams.' },
-        { name: 'Employee', description: 'Standard user with access to assigned projects and tasks.' },
+        { name: 'Member', description: 'Standard user with access to assigned projects and tasks.' },
+        { name: 'Read Only', description: 'Can view data but not make changes.' },
       ])
       .onConflictDoNothing()
       .returning();
     console.log(`✅ Roles seeded: ${seededRoles.length} new roles created.`);
 
     const allRoles = await tx.select().from(roles);
-    const adminRole = allRoles.find((r) => r.name === 'Organization Admin')!;
+    const adminRole = allRoles.find((r) => r.name === 'Admin')!;
     const managerRole = allRoles.find((r) => r.name === 'Manager')!;
-    const employeeRole = allRoles.find((r) => r.name === 'Employee')!;
+    const memberRole = allRoles.find((r) => r.name === 'Member')!;
+
+    // 1.5. Permissions
+    const perms = [
+      'dashboard:read', 'analytics:read',
+      'team:read', 'team:invite',
+      'settings:write',
+      'leads:read', 'leads:write',
+      'contacts:read', 'contacts:write',
+      'companies:read', 'companies:write',
+      'opportunities:read', 'opportunities:write',
+      'projects:read', 'projects:write'
+    ];
+    await tx.insert(permissions).values(perms.map(p => ({ name: p }))).onConflictDoNothing();
+    console.log(`✅ Permissions seeded.`);
+
+    const allPermissions = await tx.select().from(permissions);
+
+    // 1.6. Role Permissions
+    const adminPermissions = allPermissions; // Admin gets all permissions
+    const managerPermissions = allPermissions.filter(p => !p.name.startsWith('settings:'));
+    const memberPermissions = allPermissions.filter(p =>
+      p.name.endsWith(':read') ||
+      ['leads:write', 'contacts:write', 'companies:write', 'opportunities:write', 'projects:write'].includes(p.name)
+    );
+
+    await tx.insert(rolePermissions).values(
+      adminPermissions.map(p => ({ roleId: adminRole.id, permissionId: p.id }))
+    ).onConflictDoNothing();
+
+    await tx.insert(rolePermissions).values(
+      managerPermissions.map(p => ({ roleId: managerRole.id, permissionId: p.id }))
+    ).onConflictDoNothing();
+
+    await tx.insert(rolePermissions).values(
+      memberPermissions.map(p => ({ roleId: memberRole.id, permissionId: p.id }))
+    ).onConflictDoNothing();
+
+    console.log(`✅ Role Permissions seeded.`);
+
 
     // 2. Organization
     const [seededOrg] = await tx
@@ -70,8 +112,8 @@ async function main() {
       {
         email: 'employee@nexus.com',
         name: 'Employee User',
-        firebaseUid: 'firebase_uid_employee',
-        roleId: employeeRole.id,
+        firebaseUid: 'firebase_uid_member',
+        roleId: memberRole.id,
       },
     ];
 
@@ -105,7 +147,7 @@ async function main() {
     const allUsers = await tx.select().from(users);
     const adminUser = allUsers.find(u => u.email === 'rsoulrsoul439@gmail.com')!;
     const managerUser = allUsers.find(u => u.email === 'manager@nexus.com')!;
-    const employeeUser = allUsers.find(u => u.email === 'employee@nexus.com')!;
+    const memberUser = allUsers.find(u => u.email === 'employee@nexus.com')!;
 
     // 4. Teams & Team Members
     const [engTeam] = await tx.insert(teams).values({ organizationId: orgId, name: 'Engineering' }).onConflictDoNothing().returning();
@@ -113,7 +155,7 @@ async function main() {
     const [marketingTeam] = await tx.insert(teams).values({ organizationId: orgId, name: 'Marketing' }).onConflictDoNothing().returning();
     
     if (engTeam) {
-        await tx.insert(teamMembers).values([{ teamId: engTeam.id, userId: adminUser.id, isLeader: true }, { teamId: engTeam.id, userId: employeeUser.id }]).onConflictDoNothing();
+        await tx.insert(teamMembers).values([{ teamId: engTeam.id, userId: adminUser.id, isLeader: true }, { teamId: engTeam.id, userId: memberUser.id }]).onConflictDoNothing();
     }
     if (salesTeam) {
         await tx.insert(teamMembers).values({ teamId: salesTeam.id, userId: managerUser.id, isLeader: true }).onConflictDoNothing();
@@ -138,7 +180,7 @@ async function main() {
     // 6. Tasks
     const taskStatuses = ['todo', 'in-progress', 'review', 'done'];
     const taskPriorities = ['low', 'medium', 'high'];
-    const taskUsers = [adminUser.id, managerUser.id, employeeUser.id];
+    const taskUsers = [adminUser.id, managerUser.id, memberUser.id];
     const taskProjects = [crmProject.id, analyticsProject.id];
 
     const taskValues = Array.from({ length: 15 }, (_, i) => ({
@@ -149,7 +191,6 @@ async function main() {
       description: `Detailed description for feature #${i + 1}.`,
       status: taskStatuses[i % taskStatuses.length],
       priority: taskPriorities[i % taskPriorities.length],
-      dueDate: new Date(Date.now() + (i - 7) * 24 * 60 * 60 * 1000),
     }));
 
     await tx.insert(tasks).values(taskValues).onConflictDoNothing();
@@ -264,8 +305,8 @@ async function main() {
         keyHash: hash,
       });
       console.log('✅ API Key seeded.');
-      console.log(`🔑 Your one-time API key is: ${key}`);
-      console.log('   (Store it securely, it will not be shown again)');
+      console.warn(`🔑 A new API key was generated for user ${adminUser.email} in organization "${ORG_NAME}".`);
+      console.warn(`   The key itself is NOT displayed. If this is a new install, you must retrieve it from the initial log output if you configured it to show once.`);
     } else {
       console.log('✅ API Key already exists, skipping.');
     }

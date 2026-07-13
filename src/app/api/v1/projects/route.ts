@@ -11,7 +11,7 @@ const createProjectSchema = projectSchema.omit({ organizationId: true });
 
 export const GET = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'projects:view');
+  await requirePermission(user.id, membership.organizationId, 'projects:read');
   const data = await db.select().from(projects)
     .where(eq(projects.organizationId, membership.organizationId))
     .orderBy(desc(projects.createdAt));
@@ -20,7 +20,7 @@ export const GET = apiHandler(async (req: NextRequest) => {
 
 export const POST = apiHandler(async (req: NextRequest) => {
   const { user, membership } = await requireTenant(req);
-  await requirePermission(user.id, membership.organizationId, 'projects:create');
+  await requirePermission(user.id, membership.organizationId, 'projects:write');
   const input = createProjectSchema.parse(await req.json());
   if (input.teamId) {
     const [team] = await db.select({ id: teams.id }).from(teams).where(and(

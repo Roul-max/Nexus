@@ -1,30 +1,31 @@
-import { NextResponse } from "next/server";
-import { ZodError } from "zod";
-import { AuthError } from '@/lib/auth';
+import { NextRequest, NextResponse } from "next/server";
+import { ZodError } from 'zod';
+import { AuthError } from './auth';
 
-export function apiHandler(handler: Function) {
-  return async (...args: any[]) => {
+export function apiHandler(
+  handler: (req: NextRequest, params?: any) => Promise<NextResponse>
+) {
+  return async (req: NextRequest, params?: any) => {
     try {
-      return await handler(...args);
+      return await handler(req, params);
     } catch (error: any) {
-      console.error(error);
+      console.error('[API_ERROR]', { path: req.nextUrl.pathname, message: error.message });
 
-      if (error instanceof ZodError) {
-        return NextResponse.json({ 
-          error: "Validation failed", 
-          details: error.flatten().fieldErrors 
-        }, { status: 400 });
+      if (error instanceof ZodError) { // Correctly check for ZodError
+        return NextResponse.json(
+          {
+            error: 'Validation failed',
+            details: error.flatten().fieldErrors,
+          },
+          { status: 400 }
+        );
       }
 
       if (error instanceof AuthError) {
         return NextResponse.json({ error: error.message }, { status: error.status });
       }
 
-      // Handle specific DB errors, unauth, etc. here
-
-      return NextResponse.json({ 
-        error: "Internal server error" 
-      }, { status: 500 });
+      return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
     }
   };
 }

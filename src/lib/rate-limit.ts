@@ -1,41 +1,28 @@
 import { Ratelimit } from '@upstash/ratelimit';
-import { isRedisConfigured, redis } from '@/lib/redis';
+import { redis } from './redis';
+import { NextRequest } from 'next/server';
 
-export type RateLimitResult = Awaited<ReturnType<Ratelimit['limit']>>;
+// Rate limit to 10 requests per 10 seconds per IP address.
+export const ratelimit = new Ratelimit({
+  redis: redis,
+  limiter: Ratelimit.slidingWindow(10, '10 s'),
+  analytics: true,
+  prefix: '@upstash/ratelimit',
+});
 
-const limiters = new Map<string, Ratelimit>();
+// Rate limit AI chat requests to 20 per minute per user ID.
+export const aiChatRatelimit = new Ratelimit({
+  redis: redis,
+  limiter: Ratelimit.slidingWindow(20, '1 m'),
+  analytics: true,
+  prefix: 'aic_ratelimit',
+});
 
-function getLimiter(namespace: string, requests: number, window: `${number} ${'s' | 'm' | 'h' | 'd'}`) {
-  const key = `${namespace}:${requests}:${window}`;
-  let limiter = limiters.get(key);
-  if (!limiter) {
-    limiter = new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(requests, window),
-      prefix: `ratelimit:${namespace}`,
-      analytics: true,
-    });
-    limiters.set(key, limiter);
-  }
-  return limiter;
+export async function checkRateLimit(req: NextRequest) {
+  const ip = req.headers.get('x-forwarded-for') ?? '127.0.0.1';
+  return await ratelimit.limit(ip);
 }
 
-export async function checkRateLimit(
-  namespace: string,
-  identifier: string,
-  requests = 60,
-  window: `${number} ${'s' | 'm' | 'h' | 'd'}` = '1 m',
-): Promise<RateLimitResult> {
-  if (!isRedisConfigured && process.env.NODE_ENV !== 'production') {
-    return {
-      success: true,
-      limit: requests,
-      remaining: requests,
-      reset: Date.now() + 60_000,
-      pending: Promise.resolve(),
-      reason: undefined,
-      deniedValue: undefined,
-    } as RateLimitResult;
-  }
-  return getLimiter(namespace, requests, window).limit(identifier);
+export async function checkAiChatRateLimit(identifier: string) {
+  return await aiChatRatelimit.limit(identifier);
 }

@@ -42,13 +42,17 @@ export function LoginForm() {
 
       // Sync user with our backend database on login
       const token = await credential.user.getIdToken();
-      await fetch('/api/v1/auth/sync', {
+      const syncResponse = await fetch('/api/v1/auth/sync', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
+      if (!syncResponse.ok) {
+        // Log error but don't block user flow
+        console.error('Failed to sync user on login', await syncResponse.text());
+      }
       router.push('/dashboard');
     } catch (err) {
       const message =
@@ -73,13 +77,17 @@ export function LoginForm() {
 
       // Sync user with our backend database on social login
       const token = await credential.user.getIdToken();
-      await fetch('/api/v1/auth/sync', {
+      const syncResponse = await fetch('/api/v1/auth/sync', {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
         },
       });
 
+      if (!syncResponse.ok) {
+        // Log error but don't block user flow
+        console.error('Failed to sync user on social login', await syncResponse.text());
+      }
       router.push('/dashboard');
     } catch (err) {
       const message =

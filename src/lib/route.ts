@@ -1,11 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { db } from '@/db';
-import { aiConversations, aiMessages } from '@/db/schema';
 import { AuthError, requireTenant } from '@/lib/auth';
+import { apiHandler } from '@/lib/api-handler';
 import { checkAiChatRateLimit } from '@/lib/rate-limit';
 import { getChatResponse } from '@/lib/gemini';
-import { apiHandler } from '@/lib/api-handler';
 
 const chatSchema = z.object({
   messages: z.array(

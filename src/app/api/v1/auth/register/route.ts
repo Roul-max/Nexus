@@ -3,20 +3,25 @@ import { eq, or } from 'drizzle-orm';
 import { z } from 'zod';
 import { db } from '@/db';
 import { organizationUsers, organizations, roles, users } from '@/db/schema';
-import { AuthError, requireAuth } from '@/lib/auth';
+import { AuthError } from '@/lib/auth';
 import { logAudit } from '@/lib/audit';
 
 const bodySchema = z.object({ name: z.string().trim().min(1).max(255).optional() });
 
 export async function POST(req: NextRequest) {
   try {
-    const token = await requireAuth(req);
-    if (!token.email) return NextResponse.json({ error: 'Firebase account has no email' }, { status: 400 });
+    const userId = req.headers.get('x-user-id');
+    const userEmail = req.headers.get('x-user-email');
+
+    if (!userId || !userEmail) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = bodySchema.parse(await req.json().catch(() => ({})));
     const existing = await db.query.users.findFirst({
-      where: or(eq(users.firebaseUid, token.uid), eq(users.email, token.email)),
+      where: or(eq(users.firebaseUid, userId), eq(users.email, userEmail)),
     });
-    if (existing?.firebaseUid === token.uid) {
+    if (existing?.firebaseUid === userId) {
       return NextResponse.json({ message: 'User already exists', user: existing });
     }
     if (existing) {
@@ -25,16 +30,16 @@ export async function POST(req: NextRequest) {
 
     const result = await db.transaction(async (tx) => {
       const [user] = await tx.insert(users).values({
-        firebaseUid: token.uid,
-        email: token.email!,
-        name: token.name ?? body.name ?? null,
+        firebaseUid: userId,
+        email: userEmail,
+        name: body.name ?? null,
         lastSignedInAt: new Date(),
         lastActivityAt: new Date(),
       }).returning();
 
       const [organization] = await tx.insert(organizations).values({
         name: `${user.name || 'User'}'s Organization`,
-        slug: `org-${token.uid.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
+        slug: `org-${userId.toLowerCase().replace(/[^a-z0-9]/g, '')}`,
       }).returning();
 
       let role = await tx.query.roles.findFirst({ where: eq(roles.name, 'Organization Admin') });
@@ -57,7 +62,9 @@ export async function POST(req: NextRequest) {
         'user',
         user.id,
         null,
-        { email: user.email, name: user.name });
+        { email: user.email, name: user.name },
+        req
+      );
       return user;
     });
 

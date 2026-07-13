@@ -82,7 +82,7 @@ export default function TeamPage() {
                       Loading...
                     </td>
                   </tr>
-                ) : teamMembers.length === 0 ? (
+                ) : !teamMembers || teamMembers.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="text-center py-12 text-zinc-500">
                       No team members found.
